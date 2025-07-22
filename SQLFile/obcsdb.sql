@@ -19,7 +19,7 @@ SET time_zone = "+00:00";
 
 --
 -- Database: `obcsdb`
-CREATE DATABASE obcsdb;
+
 USE obcsdb;
 --
 
