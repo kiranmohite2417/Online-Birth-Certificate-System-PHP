@@ -38,7 +38,7 @@ spec:
       containers:
         - name: obcs
           # Jenkins will rewrite just the tag part on every build
-          image: 993178286287.dkr.ecr.ap-south-1.amazonaws.com/obcs-app:4
+          image: 993178286287.dkr.ecr.ap-south-1.amazonaws.com/obcs-app:5
           ports:
             - containerPort: 80
           envFrom:
