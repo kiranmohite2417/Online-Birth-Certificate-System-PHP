@@ -10,8 +10,8 @@ pipeline {
 
     // ---- Git / Repo ----
     REPO_URL       = 'https://github.com/kiranmohite2417/Online-Birth-Certificate-System-PHP.git'
-    GITHUB_USER    = 'kiranmohite2417'   // change if needed
     MANIFEST_FILE  = 'k8s/obcs-all.yaml'
+    GITHUB_BRANCH  = 'main'
 
     // ---- Image Tag ----
     IMAGE_TAG      = "${env.BUILD_NUMBER}" // or: "${env.GIT_COMMIT.take(7)}"
@@ -25,24 +25,27 @@ pipeline {
 
     stage('Checkout') {
       steps {
-        git branch: 'main', url: "${REPO_URL}"
+        git branch: "${GITHUB_BRANCH}", url: "${REPO_URL}"
       }
     }
 
     stage('AWS Login & Ensure ECR Repo') {
       steps {
-        withCredentials([usernamePassword(credentialsId: 'aws-creds',
-                                          usernameVariable: 'AWS_ACCESS_KEY_ID',
-                                          passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+        withCredentials([
+          string(credentialsId: 'aws-access-key-id',     variable: 'AWS_ACCESS_KEY_ID'),
+          string(credentialsId: 'aws-secret-access-key', variable: 'AWS_SECRET_ACCESS_KEY')
+        ]) {
           sh '''
             set -e
             export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
             export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
             export AWS_DEFAULT_REGION='${AWS_REGION}'
 
+            # Create ECR repo if not present
             aws ecr describe-repositories --repository-names ${ECR_REPO} >/dev/null 2>&1 \
               || aws ecr create-repository --repository-name ${ECR_REPO}
 
+            # Docker login to ECR
             aws ecr get-login-password --region ${AWS_REGION} \
               | docker login --username AWS --password-stdin ${ECR_URI}
           '''
@@ -63,9 +66,14 @@ pipeline {
 
     stage('Bump image tag in manifest & push back to Git') {
       steps {
-        withCredentials([string(credentialsId: 'git-token', variable: 'GIT_TOKEN')]) {
+        withCredentials([
+          usernamePassword(credentialsId: 'git-cred',
+                           usernameVariable: 'GIT_USER',
+                           passwordVariable: 'GIT_TOKEN')
+        ]) {
           sh '''
             set -e
+            # Update the image tag inside the manifest
             sed -E -i "s|(${ECR_URI}:)([[:alnum:]._-]+)|\\1${IMAGE_TAG}|g" ${MANIFEST_FILE}
 
             git config user.email "jenkins@ci.local"
@@ -74,7 +82,7 @@ pipeline {
             git add ${MANIFEST_FILE}
             git commit -m "CD: update image tag to ${IMAGE_TAG}" || echo "No changes to commit"
 
-            git push https://${GITHUB_USER}:${GIT_TOKEN}@github.com/kiranmohite2417/Online-Birth-Certificate-System-PHP.git HEAD:main
+            git push https://${GIT_USER}:${GIT_TOKEN}@github.com/kiranmohite2417/Online-Birth-Certificate-System-PHP.git HEAD:${GITHUB_BRANCH}
           '''
         }
       }
@@ -83,7 +91,7 @@ pipeline {
 
   post {
     success {
-      echo "✅ Build pushed as ${ECR_URI}:${IMAGE_TAG} and manifest updated. Argo CD will roll it out."
+      echo "✅ Image ${ECR_URI}:${IMAGE_TAG} pushed & manifest updated. Argo CD will roll it out."
     }
     failure {
       echo "❌ Pipeline failed."
