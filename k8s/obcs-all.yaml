@@ -1,0 +1,73 @@
+# 1) Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: obcs
+---
+# 2) Secret for DB credentials
+apiVersion: v1
+kind: Secret
+metadata:
+  name: obcs-db-secret
+  namespace: obcs
+type: Opaque
+stringData:
+  DB_HOST: "obcsdb.c3iw8eosk08q.ap-south-1.rds.amazonaws.com"
+  DB_USER: "admin"
+  DB_PASSWORD: "Admin#2417"
+  DB_NAME: "obcsdb"
+---
+# 3) Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: obcs-app
+  namespace: obcs
+  labels:
+    app: obcs
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: obcs
+  template:
+    metadata:
+      labels:
+        app: obcs
+    spec:
+      containers:
+        - name: obcs
+          # Jenkins will rewrite just the tag part on every build
+          image: 993178286287.dkr.ecr.ap-south-1.amazonaws.com/obcs-app:latest
+          ports:
+            - containerPort: 80
+          envFrom:
+            - secretRef:
+                name: obcs-db-secret
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 30
+            periodSeconds: 30
+---
+# 4) Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: obcs-service
+  namespace: obcs
+spec:
+  type: LoadBalancer
+  selector:
+    app: obcs
+  ports:
+    - port: 80
+      targetPort: 80
+
